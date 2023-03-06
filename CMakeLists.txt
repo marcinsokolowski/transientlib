@@ -3,8 +3,9 @@ project(transientlib VERSION 1.0.1)
 include(GNUInstallDirs)
 
 file(GLOB transientlib_sources "src/*.cpp")
+file(GLOB transientlib_sources_c "src/*.c")
 file(GLOB transientlib_headers "src/*.h")
-add_library(transientlib SHARED ${transientlib_sources})
+add_library(transientlib SHARED ${transientlib_sources} ${transientlib_sources_c})
 
 add_definitions(-D_UNIX -D_ENABLE_PROFILER_ -D_ENABLE_TRACING_ -D_ENABLE_VISUALIZATION_ -D_MONTE_CARLO_ -D_NO_ROOT_ -I${CMAKE_SOURCE_DIR}/src)
 
@@ -54,7 +55,7 @@ target_link_libraries(transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIE
 # target_link_libraries(calcfits_bg transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIES} ${FFTW3_LIB} -ldl -lpthread)
 
 add_executable(sattest  apps/sattest/main.cpp)
-target_link_libraries(sattest transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIES} ${FFTW3_LIB} -ldl -lpthread)
+target_link_libraries(sattest transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIES} ${FFTW3_LIB} -ldl -lpthread -lcurses)
 
 # INSTALLATION:
 install(TARGETS sattest RUNTIME DESTINATION bin)
