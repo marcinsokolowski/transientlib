@@ -1,47 +1,14 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include "mypoints.h"
 #include <algorithm>
 #ifdef _DEBUG
 #include <stdio.h>
 #endif
-#include "mathfunc.h"
+#include <mathfunc.h>
 #include "myfile.h"
 #include "myparser.h"
 #include "mystrtable.h"
 #include "mymatrix.h"
-#include "calcrot.h"
+#include <calcrot.h>
 
 void CRectangle::Init(long _s_x,long _s_y,long _e_x, long _e_y, long col )
 {
@@ -142,6 +109,17 @@ double CPoint::dist( CPoint& elem1, CPoint& elem2 )
 {
 	double ret = sqrt( CMyMathFunc::mysqr(elem1.x-elem2.x) + CMyMathFunc::mysqr(elem1.y-elem2.y) );
 	return ret;
+}
+
+double CPoint::calc_angle( CPoint& left_limit, CPoint& right_limit )
+{
+	double delta_x = right_limit.x - left_limit.x;
+	double delta_y = right_limit.y - left_limit.y;
+//	double tan_val = delta_y / delta_x;
+	double angle_rad = atan2( delta_y, delta_x );
+	double angle_deg = angle_rad*RAD_TO_DEG;
+	
+	return angle_deg;
 }
 
 int CPoint::find_transform( CPoint& f1_s1, CPoint& f1_s2, CPoint& f2_s1, CPoint& f2_s2,
@@ -290,6 +268,8 @@ int CPointList::ReadFromFile( const char* filename )
 	szFile.env2str();
 	if(!MyFile::DoesFileExist( szFile.c_str() ))
 		return 0;
+
+	clear(); // cleaning list 
 	MyIFile in( szFile.c_str() );
 	const char* pLine;
 	while(pLine=in.GetLine()){

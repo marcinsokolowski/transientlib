@@ -1,40 +1,8 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include "ccdrowcollist.h"
 #include "myfile.h"
 #include "mystrtable.h"
 #include "myparser.h"
+#include <math.h>
 
 
 eCCDRowColType_T CRowColDesc::GetType( const char* type_desc )
@@ -141,4 +109,160 @@ BOOL_T CWindowList::ReadFromFile( const char* filename )
 		}
 	}
 	return TRUE;	
+}
+
+void CWindowList::Add( int low_x, int low_y, int up_x, int up_y )
+{	
+	CCDWindow win( low_x, low_y, up_x, up_y );
+	push_back( win );	
+}
+
+int CCDDefectList::ReadFromFile(const char* filename, int shift_dx, int shift_dy)
+{
+	if(!MyFile::DoesFileExist( filename )){
+		return -1;
+	}
+
+	MyIFile in(filename);
+	const char* line=NULL;
+	CMyStrTable items;	
+	int n_badarea=0;
+	int n_hot=0;
+	int n_circle=0;
+
+	clear();	
+	while(line = in.GetLine(TRUE)){
+		MyParser pars = line;
+		if( mystring::get_first_non_white( pars.c_str() )=='#' )
+			continue;
+		pars.GetItems( items ); // white space separated 
+		
+		double x0 = atof( items[0].c_str() ) + shift_dx;
+		double y0 = atof( items[1].c_str() ) + shift_dy;
+		
+		if(items.size()>=4){
+			// rectangle :
+			CCDDefect tmp( x0, y0, atof( items[2].c_str() ), atof( items[3].c_str() ) );
+			push_back( tmp );
+		}else{
+			if(items.size()>=3){
+				// circle :
+				CCDDefect tmp( x0, y0, atof( items[2].c_str() ) );
+				push_back( tmp );				
+			}else{
+				if(items.size()>=2){
+					// single pixel :
+					CCDDefect tmp( x0, y0 );
+					push_back( tmp );
+				}
+			}
+		}
+		
+		if( items.size()>=5 ){
+			// if 5th column found it contains information about defect type :
+			// enum eCCDDefectType  { eCCDDefectSinglePixel=0, eCCDDefectRectangle=1, eCCDDefectCircle=2 };
+			int size_1=(size()-1);
+			((*this)[size_1]).m_eDefectType = (eCCDDefectType)atol( items[4].c_str() );
+			
+			if( ((*this)[size_1]).m_eDefectType == eCCDDefectRectangle ){
+				n_badarea++;
+			}
+			if( ((*this)[size_1]).m_eDefectType == eCCDDefectSinglePixel ){
+				n_hot++;
+			}
+			if( ((*this)[size_1]).m_eDefectType == eCCDDefectCircle ){
+				n_circle++;
+			}
+			
+		}		
+		
+	}
+
+	printf("CCDDefectList::ReadFromFile Statistics : total=%d, badarea=%d, hotpixels=%d, circlelike=%d\n",size(),n_badarea,n_hot,n_circle);
+	return size();		
+}
+
+BOOL_T CCDDefect::IsOK( double test_x, double test_y )
+{
+	switch( m_eDefectType )
+	{
+		case eCCDDefectSinglePixel :
+			if( fabs(test_x-x)<=1 && fabs(test_y-y)<=1 ){
+				return FALSE;
+			}  
+			break;
+		case eCCDDefectRectangle :
+			if( test_x>=x && test_x<=(x+dx) && test_y>=y && test_y<=(y+dy) ){
+				return FALSE;
+			}
+			break;
+		case eCCDDefectCircle :
+			if( sqrt((test_x-x)*(test_x-x)+(test_y-y)*(test_y-y)) <= radius ){
+				return FALSE;
+			}
+			break;
+		default :
+			return TRUE;						                
+	}
+	
+	return TRUE;
+}
+
+void CCDDefect::Dump()
+{
+	switch( m_eDefectType )
+	{
+		case eCCDDefectSinglePixel :
+			printf("(%d,%d) - bad/hot pixel\n",(int)x,(int)y);
+			break;
+		case eCCDDefectRectangle :
+			printf("(%d,%d)-(%d,%d) - bad rectangle area\n",(int)x,(int)y,(int)(x+dx),(int)(y+dy));
+			break;
+		case eCCDDefectCircle :
+			printf("(%d,%d) , radius = %d\n",(int)x,(int)y,(int)radius);
+			break;
+	}
+}
+
+BOOL_T CCDDefect::IsBAD( double test_x, double test_y )
+{
+	return (!IsOK(test_x,test_y));
+}
+
+BOOL_T CCDDefect::IsBadPixel( double test_x, double test_y, double check_radius  )
+{
+	if( m_eDefectType == eCCDDefectSinglePixel ){
+		if( fabs(test_x-x)<=check_radius && fabs(test_y-y)<=check_radius ){
+			return TRUE;
+		}  		
+	}
+	
+	return FALSE;
+}
+
+BOOL_T CCDDefectList::IsBAD( double test_x, double test_y )
+{
+	for( CCDDefectList::iterator it=begin();it!=end();it++){
+		if( it->IsBAD(test_x,test_y) ){
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
+BOOL_T CCDDefectList::IsOK( double test_x, double test_y )
+{
+	return (!IsBAD(test_x,test_y));
+}
+
+BOOL_T CCDDefectList::IsBadPixel( double test_x, double test_y, double check_radius )
+{
+	for( CCDDefectList::iterator it=begin();it!=end();it++){
+		if( it->IsBadPixel(test_x,test_y,check_radius) ){
+			return TRUE;
+		}
+	}
+	
+	return FALSE;	
 }

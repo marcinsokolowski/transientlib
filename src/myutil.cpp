@@ -1,41 +1,10 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include <stdio.h>
 #include "mystring.h"
 #include "myutil.h"
 #include <sys/utsname.h>
 #include "myparser.h"
+#include "basestructs.h"
+#include "mystrtable.h"
 
 double MAX_func( double x, double y )
 {
@@ -88,7 +57,7 @@ int get_median( LONG_T* tab, LONG_T cnt )
 int get_no_stars_median( LONG_T* tab, LONG_T cnt )
 {
 	int end_cnt = (int)(0.75*cnt);
-	my_qsort( tab , end_cnt );
+	my_qsort( tab , cnt );
 	int pos = (end_cnt/2);
 	return tab[pos];
 }
@@ -128,6 +97,41 @@ void my_qsort( LONG_T* tab, LONG_T cnt )
 		my_qsort( &(tab[beg]), cnt-beg );
 	}
 } 
+
+// to sort table call : my_qsort( tab, 10, 10 )
+void my_qsort_int( int* tab, LONG_T cnt )
+{
+	register LONG_T divider = tab[0];
+	
+	register int beg = 1;
+	register int end = cnt-1;
+	LONG_T tmp;
+
+	if(cnt){	
+		while(beg<=end){
+			if(tab[beg]>divider){
+				if(tab[end]<=divider){
+					REPLACE_ELEMS( tab, beg, end )
+					beg++;
+					end--;
+				}else{
+					end--;
+				}
+			}else{		
+				beg++;
+				if(tab[end]>divider)
+					end--;
+			}
+		}
+		if(end!=0){
+			REPLACE_ELEMS( tab, end, 0)
+		}
+
+		my_qsort_int( tab, end );
+		my_qsort_int( &(tab[beg]), cnt-beg );
+	}
+} 
+
 
 void my_sort_float( double* ftab, long cnt )
 {
@@ -307,6 +311,39 @@ int find_value( vector<int>& tab, int value )
 	return -1;
 }
 
+int qfind_value( vector<int>& tab, int val )
+{
+	int tab_size=tab.size();
+	register int pos0=0;
+	register int pos1=(tab_size-1);
+	while( pos1>pos0 && pos1>=0 && pos0>=0 ){
+		int pos_new = (pos1+pos0)/2;
+		if( tab[pos_new]==val ){
+			while( pos_new>=0 && tab[pos_new]==val ){
+				pos_new--;
+			}
+			return (pos_new+1);
+		}else{
+			if( val < tab[pos_new] ){
+				pos1 = pos_new-1;
+			}else{
+				pos0 = pos_new+1;
+			}			
+		}
+	}
+	if( pos1>=0 && pos0>=0 && pos1<tab_size && pos0<tab_size ){
+		if( tab[pos1]==val ){
+			while( pos1>=0 && tab[pos1]==val ){
+				pos1--;
+			}
+			return (pos1+1);
+		}
+	}
+	return NOT_FOUND;
+
+}
+
+
 int do_print_usage( int argc, char* argv[], int min_argc_req )
 {
 	if( argc<min_argc_req || ( strncmp(argv[1],"-h",2)==0 || strncmp(argv[1],"--h",2)==0 ) ){
@@ -343,7 +380,7 @@ mystring get_uname()
 
 int find_min_value( int* tab, int count, int& min_pos )
 {
-	register double min_value=5000000.00;
+	register int min_value=5000000;
 	min_pos=-1;
 	for(register int i=0;i<count;i++){
 		if(tab[i]<min_value){
@@ -363,6 +400,13 @@ BOOL_T compare_double( double l, double r )
 	if(ret==0)
 		return TRUE;
 	return FALSE;		
+}
+
+const char* safe_string( const char* szValue )
+{
+	if( szValue )
+		return szValue;
+	return "";
 }
 
 int safe_atol( const char* szValue )
@@ -550,3 +594,99 @@ float non_zero( float val, float val_default )
 		return val;
 	return val_default;
 }
+
+
+void my_calc_mean_and_sigma( int* tab, int count, double& mean, double& rms,
+										int min_val, int max_val )
+{
+	double sum=0.00;
+	double sum2=0.00;
+	int used_cnt=0;
+
+	for(int i=0;i<count;i++){
+		if( tab[i] >= min_val && tab[i] <= max_val ){
+         double newval = ((double)tab[i]);
+         double newval2 = (newval*newval);
+		
+			sum = sum + newval;
+			sum2 = sum2 + newval2;
+			used_cnt++;
+		}
+	}
+	
+	mean = ((double)sum) / ((double)used_cnt);
+	double mean2 = ((double)sum2) / ((double)used_cnt);
+	double avg2 = mean*mean;
+	if( mean2 >= avg2 ){
+		rms = sqrt( mean2 - avg2 );
+	}else{
+		double sigma=0.00;
+		for(int i=0;i<count;i++){
+	      if( tab[i] >= min_val && tab[i] <= max_val ){
+				double diff = (tab[i]-mean);
+				sigma = sigma + diff*diff;
+			}
+		}
+
+		rms =  sqrt( sigma / used_cnt );
+		printf("WARNING : mean2=%.4f < avg2=%.4f -> rms=%.4f\n",mean2,avg2,rms);
+	}	
+}
+
+
+void my_calc_mean_and_sigma_elem( ELEM_TYPE* tab, int count, double& mean, double& rms,
+										int min_val, int max_val )
+{
+	double sum=0.00;
+	double sum2=0.00;
+	int used_cnt=0;
+
+	for(int i=0;i<count;i++){
+		if( tab[i] >= min_val && tab[i] <= max_val ){
+         double newval = ((double)tab[i]);
+         		
+			sum = sum + newval;
+			sum2 = sum2 + (newval*newval);
+			used_cnt++;
+		}
+	}
+	
+	mean = ((double)sum) / ((double)used_cnt);
+	double mean2 = ((double)sum2) / ((double)used_cnt);
+	double avg2 = mean*mean;
+	if( mean2 >= avg2 ){
+		rms = sqrt( mean2 - avg2 );
+	}else{
+		double sigma=0.00;
+		for(int i=0;i<count;i++){
+	      if( tab[i] >= min_val && tab[i] <= max_val ){
+				double diff = (tab[i]-mean);
+				sigma = sigma + diff*diff;
+			}
+		}
+
+		rms =  sqrt( sigma / used_cnt );
+		printf("WARNING : mean2=%.4f < avg2=%.4f -> rms=%.4f\n",mean2,avg2,rms);
+	}	
+}
+
+
+BOOL_T ParseCommand( const char* szCmd, sCommand& cmd )
+{
+	MyParser pars=szCmd;
+	CMyStrTable items;  
+	if( pars.GetItems( items, "," ) ){
+		cmd.command = atol( items[0].c_str() );
+		if( items.size() >= 2 ){
+			cmd.szParam1 = items[1].c_str();
+		}
+		if( items.size() >= 3 ){
+			cmd.szParam2 = items[2].c_str();
+		}
+	}   
+                                                            
+   return ( items.size()>0 );
+}
+
+
+                                                               

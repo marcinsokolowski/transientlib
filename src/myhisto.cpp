@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include "myhisto.h"
 #include <string.h>
 #include "cexcp.h"
@@ -42,6 +9,8 @@
 #include "mymacros.h"
 
 BOOL_T CMyHisto::m_DoRetryFit=FALSE;
+double CMyHisto::m_ReasonableMeanFit=10000.000;
+double CMyHisto::m_ReasonableSigmaFit=10000.000;
 
 void CMyHisto::Init()
 {
@@ -215,11 +184,14 @@ double CMyHisto::GetBinCenter( int bin_no )
 
 mystring CMyHisto::DumpToFile( int frame_index,  const char* szInName )
 {
+	char szIndex[16];
+	sprintf(szIndex,"%.5d",frame_index);
+
 	mystring szName;
    szName << "HISTO/";
 	if(szInName && szInName[0])
 		szName << szInName << "_";
-	szName << "histo_" << m_szHistoName << "_" << frame_index << ".txt";	
+	szName << "histo_" << m_szHistoName << "_" << szIndex << ".txt";	
 	DumpToFile( szName.c_str() );
 
 	return szName;
@@ -252,6 +224,8 @@ void CMyHisto::DumpToFile( const char* szFileName )
 	}
 	out.Printf("%s",szBuf.c_str());
 	out.Close();
+	
+	printf("DEBUG : CMyHisto::DumpToFile dumped histogram to file %s\n",szFileName);
 }
 
 int CMyHisto::get_values( double* x_values, double* y_values, int max_count )
@@ -332,7 +306,7 @@ BOOL_T CMyHisto::Fit( eFitType_T fittype, double* par, int par_count )
 BOOL_T CMyHisto::CheckIfReasonableFit( double& mean_fit, double& sigma_fit,
 													double& mean, double& rms )
 {
-	if( fabs(mean_fit) > 10000.000 || fabs(sigma_fit) > 10000.000 )
+	if( fabs(mean_fit) > CMyHisto::m_ReasonableMeanFit || fabs(sigma_fit) > CMyHisto::m_ReasonableSigmaFit )
 		return FALSE;
 
 	return TRUE;
@@ -390,7 +364,8 @@ BOOL_T CMyHisto::RetryFitGauss( double MeanStart, double SigmaStart, double Norm
 										  
 
 BOOL_T CMyHisto::FitGauss( double& mean, double& rms, double& norm, int nSteps, 
-									BOOL_T bCheckIfResonable, BOOL_T bUseMeanOnFitFailed /* =FALSE */ )
+									BOOL_T bCheckIfResonable, BOOL_T bUseMeanOnFitFailed /* =FALSE */,
+									BOOL_T bDumpFailedFit /*=TRUE*/ )
 {
 	int nStepsSav = nSteps;
 	double SigmaStart = CMyMathFunc::round( m_RMSValue , 0 );
@@ -535,6 +510,9 @@ BOOL_T CMyHisto::FitGauss( double& mean, double& rms, double& norm, int nSteps,
 		if(bCheckIfResonable){
 			if(!CheckIfReasonableFit( mean, rms, m_MeanValue, m_RMSValue ))
 			{
+				if( bDumpFailedFit ){
+					DumpToFile( 0, "failed_fit" );
+				}
 				_TRACE_PRINTF_1("FIT result does not make any sens - fit FAILED\n");
 				return FALSE;			
 			}
@@ -546,6 +524,9 @@ BOOL_T CMyHisto::FitGauss( double& mean, double& rms, double& norm, int nSteps,
 		_TRACE_PRINTF_1("\n\n/**********************************/\n");
 		_TRACE_PRINTF_1("Fit of Gauss FAILED !!!!!!!!!!!!!!\n");
 		_TRACE_PRINTF_1("/**********************************/\n\n");
+		if( bDumpFailedFit ){
+			DumpToFile( 0, "failed_fit2" );
+		}
 
 		if( bUseMeanOnFitFailed ){
 			mean = mean_sav;

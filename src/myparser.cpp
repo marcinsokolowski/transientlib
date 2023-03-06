@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include "myparser.h"
 #include <string.h>
 #include "mystrtable.h"
@@ -231,8 +198,14 @@ const char* MyParser::GetNextLine(BOOL_T bAddEndLine)
 		m_szLine += (*this)[m_pos];
 		m_pos++;
 	}
-	if ((*this)[m_pos]=='\n' && bAddEndLine)
-		m_szLine += (*this)[m_pos];
+	
+	// NEW MS - 2009-06-27
+	// if added due to error when parsing null terminated strings - 
+	// multiply lines strings :
+	if( m_pos<=length() ){ 
+		if ((*this)[m_pos]=='\n' && bAddEndLine)
+			m_szLine += (*this)[m_pos];
+	}
 	m_pos++;
 	return (m_szLine.length() ? m_szLine.c_str() : NULL);
 }
@@ -336,3 +309,31 @@ BOOL_T MyParser::GetFraction( const char* szFraction, CFraction& fract  )
 	return TRUE;
 }
 
+BOOL_T MyParser::ParseSaveArea( const char* szVal, 
+											int& x0, int& y0, int& x1, int& y1 )
+{
+	x0 = 0;
+	y0 = 0;
+	x1 = 0;
+	y1 = 0;
+	if( szVal && szVal[0] ){
+   	CMyStrTable items;
+      MyParser szPars = szVal;
+      szPars.GetItems(items);
+      if( items.size()>=2 ){
+      	if( atol( items[0].c_str() )>0 )
+         	x0 = atol( items[0].c_str() );
+	      if( atol( items[1].c_str() )>0 )
+   	      y0 = atol( items[1].c_str() );
+      }
+      if( items.size()>=4 ){
+      	if( atol( items[2].c_str() )>0 )
+         	x1 = atol( items[2].c_str() );
+	      if( atol( items[3].c_str() )>0 )
+   	      y1 = atol( items[3].c_str() );
+      }
+		
+		return TRUE;
+	}
+	return FALSE;
+}

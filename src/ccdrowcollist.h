@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #ifndef _CCD_ROW_COL_LIST_H__
 #define _CCD_ROW_COL_LIST_H__
 
@@ -97,8 +64,61 @@ class CWindowList : public vector<CCDWindow>
 public:
 	CWindowList(){};
 	CWindowList( const char* filename );
+	void Add( int low_x, int low_y, int up_x, int up_y );
 
 	BOOL_T ReadFromFile( const char* filename );	
+};
+
+// Class for storing CCD defects or other artifacts which should be flagged and excluded from analysis :
+enum eCCDDefectType  { eCCDDefectSinglePixel=0, eCCDDefectRectangle=1, eCCDDefectCircle=2 };
+// 
+class CCDDefect
+{
+public :
+	// hotpixel or other bad pixel :
+	CCDDefect(double _x, double _y )
+		: x(_x),y(_y),dx(0),dy(0),m_eDefectType(eCCDDefectSinglePixel)
+	{
+	}
+	
+	// rectangle ( ice crystals or other bad parts of CCD )
+	CCDDefect(double _x, double _y, double _dx, double _dy )
+		:  x(_x),y(_y),dx(_dx),dy(_dy),m_eDefectType(eCCDDefectRectangle)
+	{
+	}	
+
+	// circle like object on CCD - rather for future of for ICE CRYSTALS as well 
+	CCDDefect(double _x, double _y, double _radius )
+		: x(_x),y(_y),dx(_radius),dy(_radius),radius(_radius)
+	{
+	}
+
+	BOOL_T IsOK( double test_x, double test_y  );
+	BOOL_T IsBAD( double test_x, double test_y );
+	
+	BOOL_T IsBadPixel( double test_x, double test_y, double check_radius=1.00  );
+	
+	void Dump();
+	
+	double x; // if rectangle - X of lower-left corner of defect 
+	double y; // if rectangle - Y of lower-left corner of defect
+	double dx; // for rectangle X size 
+	double dy; // for rectangle Y size 
+	double radius; // for cricle like defect 
+	eCCDDefectType m_eDefectType;	   	
+};
+
+
+class CCDDefectList : public vector<CCDDefect>
+{   
+public:
+	CCDDefectList(){};
+	int ReadFromFile(const char* filename, int shift_dx=0, int shift_dy=0 );
+	
+	BOOL_T IsOK( double test_x, double test_y  );
+	BOOL_T IsBAD( double test_x, double test_y );	   
+
+	BOOL_T IsBadPixel( double test_x, double test_y, double check_radius=1.00  );	
 };
 
 #endif

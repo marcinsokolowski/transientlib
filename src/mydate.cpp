@@ -218,6 +218,23 @@ mystring get_gmtime_string( time_t ut_time )
 	return szRet;
 }
 
+mystring get_localtime_string( time_t ut_time )
+{
+	struct tm gmtime_tm;
+	mystring szRet;
+	if(localtime_r( &ut_time, &gmtime_tm )){
+		char tempstring[64];
+
+		// bug ??? first %.2u -> %.4u ???
+		sprintf(tempstring,"%.2u%.2u%.2u_%.2u%.2u%.2u",
+									gmtime_tm.tm_year+1900,(gmtime_tm.tm_mon+1),gmtime_tm.tm_mday,
+									gmtime_tm.tm_hour,gmtime_tm.tm_min,gmtime_tm.tm_sec);
+		szRet << tempstring;
+	}	
+	return szRet;
+
+}
+
 time_t get_unixtime_from_local_string( const char* szDTM )
 {
    struct tm local_time_tm;
@@ -256,13 +273,13 @@ time_t get_unixtime_from_local_string2( const char* szDTM )
 }
 
 
-time_t get_gmtime_from_string( const char* szGmTime )
+time_t get_gmtime_from_string( const char* szGmTime , const char* format /*="%Y%m%d_%H%M%S"*/)
 {
    struct tm gmtime_tm;
    // sscanf( szGmTime, "%.4u%.2u%.2u_%.2u%.2u%.2u", &gmtime_tm.tm_year,&gmtime_tm.tm_mon,
    // &gmtime_tm.tm_mday,&gmtime_tm.tm_hour,&gmtime_tm.tm_min,&gmtime_tm.tm_sec);
 
-   strptime( szGmTime, "%Y%m%d_%H%M%S", &gmtime_tm );
+   strptime( szGmTime, format, &gmtime_tm );
 
    // gmtime_tm.tm_year -= 1900;
    // gmtime_tm.tm_mon--;
@@ -516,11 +533,15 @@ mystring get_clock_in_sec_string( long cl)
 	long msec = (long)(r*100.00);
 	long sec = (msec/100);
 	long l_msec = (msec%100);
-	mystring szStr;
-	szStr << cl << " ticks (=" << sec << ".";
-	if(l_msec<10)
-		szStr << "0";
-	szStr << l_msec << " sec)";
+//	mystring szStr;
+//	szStr << cl << " ticks (= " << sec << ".";
+//	if(l_msec<10)
+//		szStr << "0";
+//	szStr << l_msec << " sec)";
+        char szMsg[128];
+        sprintf(szMsg,"%ld ticks ( = %.8f sec )",cl,r);
+        mystring szStr;
+        szStr << szMsg;
 	return szStr;
 }
 

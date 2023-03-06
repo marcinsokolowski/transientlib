@@ -182,7 +182,7 @@ e_sun = 0.016709 - 1.151E-9 * d;                // eccentricity
 M_sun = 356.0470 + 0.9856002585 * d;            // mean anomaly (deg)
 oblecl_sun = 23.4393 - 3.563E-7 * d;            // obliquity of the ecliptic (deg)
 L_sun = w_sun + M_sun;                          // mean longitude (deg)
-E_sun = M_sun + (180.0/PI) * e_sun              // eccentric anomaly
+E_sun = M_sun + (180.0/PI_VALUE) * e_sun              // eccentric anomaly
       * sind(M_sun)*(1 + e_sun*cosd(M_sun));
 x_sun = cosd(E_sun) - e_sun;                    // rectangular coordinates
 y_sun = sind(E_sun) * sqrt(1 - e_sun*e_sun);

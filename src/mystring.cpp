@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include "mystring.h"
 #include "cexcp.h"
 #include "myenv.h"
@@ -92,6 +59,14 @@ void mystring::replace_char( char* ptr, char old,char nnew)
 			ptr[i]=nnew;
 		i++;
 	}
+}
+
+mystring& mystring::extend(int min_length, char fill_char)
+{
+   while( length() < min_length ){
+      (*this) += fill_char;
+   }
+   return (*this);
 }
 
 mystring& mystring::replace_char(char old,char nnew)
@@ -364,6 +339,12 @@ void mystring::DumpToFile( const char* szFileName, const char* mode )
 {
 	MyOFile out( szFileName , mode );
 	out.Printf("%s\n",m_pchData);	
+}
+
+void mystring::SkipTrailSpaces()
+{
+	SkipTrailSpaces( m_pchData );
+	m_Length = strlen( m_pchData );
 }
 
 void mystring::SkipTrailSpaces( char* ptr )

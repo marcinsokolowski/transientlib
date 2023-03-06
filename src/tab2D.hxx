@@ -19,9 +19,9 @@
 #include "basestructs.h"
 #include "laplace_info.h"
 #include "ccdrowcollist.h"
-#include <mathconst.h> 
+#include "mathconst.h"
 #include "myprogress.h"
-
+#include "mymacros.h"
 
 template<class ARG_TYPE>
 void Table2D<ARG_TYPE>::SetDataPtr( ARG_TYPE* pData )
@@ -34,7 +34,7 @@ void Table2D<ARG_TYPE>::SetDataPtr( ARG_TYPE* pData )
 template<class ARG_TYPE>
 Table2D<ARG_TYPE>::Table2D()
 : m_pData(NULL),m_Index(0),m_pFastData(NULL), m_X_On_Big(0),
-  m_Y_On_Big(0),m_PrevShiftX(0),m_PrevShiftY(0),
+  m_Y_On_Big(0),m_PrevShiftX(0),m_PrevShiftY(0),m_StartOnOrigX(0),m_StartOnOrigY(0),
   m_SizeX(0),m_SizeY(0),m_Size(0),m_MaxVal(0),m_MaxX(0),m_MaxY(0),
   m_totalShiftX(0),m_totalShiftY(0),m_bAllocHere(FALSE),
   m_pDistribTab(NULL),m_MaxValue(0),m_pValuesTable(NULL),m_pWrkTable(NULL),
@@ -67,7 +67,7 @@ BOOL_T Table2D<ARG_TYPE>::InitConstructor(long x_size,long y_size,long idx,BOOL_
 template<class ARG_TYPE>
 Table2D<ARG_TYPE>::Table2D(long x_size,long y_size,long idx,BOOL_T bAllocHere)
 : m_pData(NULL),m_Index(idx),m_pFastData(NULL), m_X_On_Big(0),
-  m_Y_On_Big(0),m_PrevShiftX(0),m_PrevShiftY(0),
+  m_Y_On_Big(0),m_PrevShiftX(0),m_PrevShiftY(0),m_StartOnOrigX(0),m_StartOnOrigY(0),
   m_SizeX(0),m_SizeY(0),m_Size(0),m_MaxVal(0),m_MaxX(0),m_MaxY(0),
   m_totalShiftX(0),m_totalShiftY(0),m_bAllocHere(bAllocHere),
   m_pDistribTab(NULL),m_MaxValue(0),m_pValuesTable(NULL),m_pWrkTable(NULL),
@@ -83,7 +83,7 @@ Table2D<ARG_TYPE>::Table2D(long x_size,long y_size,long idx,BOOL_T bAllocHere)
 template<class ARG_TYPE>
 Table2D<ARG_TYPE>::Table2D(const Table2D& right)
 : m_pData(NULL),m_Index(0),m_pFastData(NULL), m_X_On_Big(0),
-  m_Y_On_Big(0),m_PrevShiftX(0),m_PrevShiftY(0),
+  m_Y_On_Big(0),m_PrevShiftX(0),m_PrevShiftY(0),m_StartOnOrigX(0),m_StartOnOrigY(0),
   m_SizeX(0),m_SizeY(0),m_Size(0),m_MaxVal(0),m_MaxX(0),m_MaxY(0),
   m_totalShiftX(0),m_totalShiftY(0),m_pDistribTab(NULL),m_MaxValue(0),
   m_pValuesTable(NULL),m_pWrkTable(NULL)
@@ -137,6 +137,7 @@ void Table2D<ARG_TYPE>::ReCreateIndex()
       m_pFastData = NULL;
    }	
 	m_pFastData = new ARG_TYPE*[m_SizeY];
+printf("DEBUG : ::ReCreateIndex m_SizeY=%d (ptr = %x)\n",m_SizeY,m_pFastData);
 	ReCalcIndex();		
 }
 
@@ -179,6 +180,43 @@ BOOL_T Table2D<ARG_TYPE>::Alloc(long x_size,long y_size)
 		return TRUE;
 	}
 	return FALSE;
+}
+
+template<class ARG_TYPE>
+BOOL_T Table2D<ARG_TYPE>::ReSize(long x_size,long y_size)
+{
+	if(m_SizeX==x_size && m_SizeY==y_size)
+		return TRUE;
+
+	if( x_size*y_size > m_SizeX*m_SizeY ){
+		// new image is larger -> buffer size must be increased :
+		return Alloc( x_size , y_size );
+	}
+	
+
+	if(m_pFastData){
+		delete [] m_pFastData;
+		m_pFastData = NULL;
+	}
+	m_SizeX = x_size;
+	m_SizeY = y_size;
+	m_Size = (m_SizeX*m_SizeY);
+	if (m_SizeX>0 && m_SizeY>0){
+		 try{
+			 if(m_bAllocHere){
+				 ReCreateIndex();
+				 if(m_pData)
+	            Init();
+			 }
+		 }catch(...){
+			 return FALSE;			
+		 }
+		 if (!m_pData)
+			return FALSE;
+		return TRUE;
+	}
+	return FALSE;
+	
 }
 
 template<class ARG_TYPE>
@@ -245,7 +283,36 @@ Table2D<ARG_TYPE>& Table2D<ARG_TYPE>::Assign(const Table2D<ARG_TYPE>& right)
 	if(m_SizeX!=right.m_SizeX || m_SizeY!=right.m_SizeY)
 		Alloc(right.m_SizeX,right.m_SizeY);
 //printf("here::Assign 2\n");fflush(0);
-	memcpy(m_pData,right.m_pData,m_SizeX*m_SizeY*sizeof(ARG_TYPE));
+
+	ARG_TYPE* tmp_ptr = m_pData; // needed for tests  
+
+	if( m_pData != right.m_pData ){
+		if( m_bAllocHere ){
+			printf("DEBUG : Table2D<ARG_TYPE>::Assign : memcpy( 0x%x , 0x%x )\n",m_pData,right.m_pData);
+			memcpy(m_pData,right.m_pData,m_SizeX*m_SizeY*sizeof(ARG_TYPE));
+		}else{
+			// MS : 2009-09-28 due to bug found that after GetData was done
+			// the image 00875 was overwriten somehow by 00874-DARK 
+			// it turned out that it is because of  CCDPipeline::RestartPipelineKeepCurrent
+			// and (GetNext()) = m_pCCD[curr_pos];
+			// which made a copy of previous image to memory already containing 
+			// new image from GetData !!!
+			// This is unacceptable !!!
+			printf("DEBUG : Table2D<ARG_TYPE>::Assign m_pData(= 0x%x ) := SetDataPtr( 0x%x )\n",m_pData,right.m_pData);
+			SetDataPtr( right.m_pData );
+		}
+
+		// TEMPORARY - to be commented out - corresponds to ccd_controller.cpp / GetData
+		printf("OLD ( 0x%x ) : ",tmp_ptr);
+		for(int ii=(2062*100+1000);(ii<=(2062*100+1005) && ii<m_Size);ii++){
+			printf("%d ",tmp_ptr[ii]);
+		}
+		printf("\nNEW ( 0x%x ) : ",m_pData);
+		for(int ii=(2062*100+1000);(ii<=(2062*100+1005) && ii<m_Size);ii++){
+			printf("%d ",m_pData[ii]);
+		}
+		printf("\n");
+	}
 //printf("here::Assign 3\n");fflush(0);
 	return (*this);
 }
@@ -270,6 +337,9 @@ Table2D<ARG_TYPE>& Table2D<ARG_TYPE>::operator=(const Table2D<ARG_TYPE>& right)
 	m_MaxVal = right.m_MaxVal;
 	m_MedianValue = right.m_MedianValue;
 	m_MeanValue = right.m_MeanValue;
+	m_StartOnOrigX = right.m_StartOnOrigX;
+   m_StartOnOrigY = right.m_StartOnOrigY;
+
 //printf("here 4?\n");fflush(0);
 	return (*this);
 }
@@ -349,10 +419,15 @@ LONG_T Table2D<ARG_TYPE>::GetMaxValueAndPos( long start_x, long start_y,
 }
 
 template<class ARG_TYPE>
-int Table2D<ARG_TYPE>::GetPixelsAbove( double treshold, CPointList& pointList )
+int Table2D<ARG_TYPE>::GetPixelsAbove( double treshold, CPointList& pointList, int start_x, int end_x, int start_y, int end_y )
 {
-	for(register int y=0;y<m_SizeY;y++){
-		for(register int x=0;x<m_SizeX;x++){
+	int minX = MAX(start_x,0);
+	int minY = MAX(start_y,0);
+	int maxX = MIN(end_x,m_SizeX);
+	int maxY = MIN(end_y,m_SizeY);
+
+	for(register int y=minY;y<maxY;y++){
+		for(register int x=minX;x<maxX;x++){
 			if(m_pFastData[y][x]>treshold){
 				CPoint tmp;
 				tmp.x = x;
@@ -641,8 +716,20 @@ BOOL_T Table2D<ARG_TYPE>::CalcStat( ARG_TYPE** data, int sizeX, int sizeY,
 		for(register int y=desc.m_LowY;y<=desc.m_UpY;y++){
 			for(register int x=desc.m_LowX;x<=desc.m_UpX;x++){
 				if(x>=0 && y>=0 && x<sizeX && y<sizeY){
-					sum += data[y][x];
-					sum2 += (data[y][x])*(data[y][x]);
+					double prev_sum=sum,prev_sum2=sum2;
+					double newval = ((double)(data[y][x]));
+					double newval2 = newval*newval;
+
+					sum += newval;
+					sum2 += newval2;
+
+					if( sum < prev_sum ){
+						printf("ERROR : in Table2D<ARG_TYPE>::CalcStat : sum=%.8f < prev_sum=%.8f after adding %d\n",sum,prev_sum,(int)data[y][x]);
+					}
+					if( sum2 < prev_sum2 ){
+						printf("ERROR : in Table2D<ARG_TYPE>::CalcStat : sum2=%.8f < prev_sum2=%.8f after adding %d^2 = %.8f\n",sum2,prev_sum2,(int)data[y][x],newval2);
+					}
+
 					count++;
 					if(data[y][x]<min_value){
 						min_value = data[y][x];
@@ -660,7 +747,13 @@ BOOL_T Table2D<ARG_TYPE>::CalcStat( ARG_TYPE** data, int sizeX, int sizeY,
 	if(count>0){
 		mean = (sum/count);
 		double mean2 = (sum2/count);
-		rms = sqrt( (mean2) - (mean*mean) );
+		if( mean2 >= (mean*mean) ){
+			rms = sqrt( (mean2) - (mean*mean) );
+		}else{
+			rms = 0.00;
+			printf("WARNING : rms calculation failed ! sum=%.8f sum2=%.8f count=%d mean2=%.8f < mean^2=%.8f^2=%.8f !!!\n",
+						sum,sum2,count,mean2,mean,(mean*mean));fflush(stdout);
+		}
 	}
 
 	if( rowcollist.size() ){
@@ -730,8 +823,11 @@ BOOL_T Table2D<ARG_TYPE>::CalcStat( CRowColList& rowcollist, double& rms,
 			// row :
 			if(desc.num>=0 && desc.num<m_SizeY){
 				for(register int x=0;x<m_SizeX;x++){
-					sum += m_pFastData[desc.num][x];
-					sum2 += (m_pFastData[desc.num][x])*(m_pFastData[desc.num][x]);
+					double newval = ((double)(m_pFastData[desc.num][x]));
+					double newval2 = newval*newval;
+
+					sum += newval;
+					sum2 += newval2;
 					count++;
 					if(m_pFastData[desc.num][x]<min_value){
 						min_value = m_pFastData[desc.num][x];
@@ -746,8 +842,11 @@ BOOL_T Table2D<ARG_TYPE>::CalcStat( CRowColList& rowcollist, double& rms,
 			// column :
 			if(desc.num>=0 && desc.num<m_SizeX){
 				for(register int y=0;y<m_SizeY;y++){
-					sum += m_pFastData[y][desc.num];
-					sum2 += (m_pFastData[y][desc.num])*(m_pFastData[y][desc.num]);
+					double newval = ((double)(m_pFastData[y][desc.num]));
+					double newval2 = newval*newval;
+
+					sum += newval;
+					sum2 += newval2;
 					count++;
 					if(m_pFastData[y][desc.num]<min_value){
 						min_value = m_pFastData[y][desc.num];
@@ -811,8 +910,11 @@ void Table2D<ARG_TYPE>::GetMeanAndRMS( double& mean, double& rms )
 	double sum=0;
 	double sum2=0;
 	for( register int i=0;i<size;i++){
-		sum += m_pData[i];
-		sum2 += (m_pData[i])*(m_pData[i]);		
+		double newval = ((double)(m_pData[i]));
+		double newval2 = newval*newval;
+
+		sum += newval;
+		sum2 += newval2;
 	}
 	mean = (sum/size);
 	rms = sqrt( sum2/size - mean*mean );
@@ -1097,8 +1199,10 @@ BOOL_T Table2D<ARG_TYPE>::GetVariableMeanAndSigma( eLaplaceType_T laplaceType,
 
 		for( int y=start_y;y<end_y;y++ ){
          for( int x=start_x;x<end_x;x++ ){
-				mean_tmp += m_pFastData[y][x];
-				sum2_tmp += (m_pFastData[y][x])*(m_pFastData[y][x]);
+				double newval = ((double)(m_pFastData[y][x]));
+
+				mean_tmp += newval;
+				sum2_tmp += newval*newval;
 				count_tmp++;
 		
 				if( m_pFastData[y][x] < minVal ){
@@ -1108,6 +1212,11 @@ BOOL_T Table2D<ARG_TYPE>::GetVariableMeanAndSigma( eLaplaceType_T laplaceType,
 					maxVal = m_pFastData[y][x];
 				}
 				// printf("%d\n",m_pData[i]);
+
+
+//				if( frame_index==0 ){
+//					printf("TEMPORARY_DUMP = %d %d %d\n",x,y,m_pFastData[y][x]);
+//				}
 			}
 		}
 
@@ -1134,10 +1243,16 @@ BOOL_T Table2D<ARG_TYPE>::GetVariableMeanAndSigma( eLaplaceType_T laplaceType,
 		for( int y=start_y;y<end_y;y++ ){
 			for( int x=start_x;x<end_x;x++ ){
 				if( p_lap_data[y][x]>=minVal && p_lap_data[y][x]<=maxVal ){
-					mean_lap += p_lap_data[y][x];
-					sum2_lap += (p_lap_data[y][x])*(p_lap_data[y][x]);
+					double newval=p_lap_data[y][x];
+
+					mean_lap += newval;
+					sum2_lap += newval*newval;
 		
 					count_lap++;
+
+//					if( frame_index==0 ){
+//						printf("TEMPORARY_DUMP = %d %d %d\n",x,y,p_lap_data[y][x]);
+//					}
 				}
 			}
 		}
@@ -1149,39 +1264,53 @@ BOOL_T Table2D<ARG_TYPE>::GetVariableMeanAndSigma( eLaplaceType_T laplaceType,
 		maxVal = mean_lap + 5*sigma_lap;
 	}
 
+	BOOL_T bDoAdd=TRUE;
+	if( pHisto ){
+		bDoAdd = FALSE;
+	}
 
-	if(!pHisto){
-		if( laplaceType == eRawS ){	
-			pHisto = new CMyHisto( laplace_name, 0, 2*mean_tmp, binNo );
+	if( laplaceType == eRawS ){	
+		if( !pHisto ){
+			double max_histo_val = MAX((2*mean_tmp),(mean_tmp+5*sigma_tmp));
+			pHisto = new CMyHisto( laplace_name, 0, max_histo_val, binNo );
 		}else{
-			// temporary - NEW change 
-			if( minVal >= maxVal ){
-				printf("Bad ranges ! %.2f , %.2f\n",minVal, maxVal);
+			pHisto->Init( 0, 2*mean_tmp, binNo );
+		}
+	}else{
+		// temporary - NEW change 
+		if( minVal >= maxVal ){
+			printf("Bad ranges ! %.2f , %.2f\n",minVal, maxVal);
 
-				if( fabs(mean_lap)<0.1 && fabs(sigma_lap)<0.1 ){
-					printf("WARNING : all values in window (%d,%d)-(%d,%d) are 0 ???!!!\n",start_x,start_y,end_x,end_y);
+			if( fabs(mean_lap)<0.1 && fabs(sigma_lap)<0.1 ){
+				printf("WARNING : all values in window (%d,%d)-(%d,%d) are 0 ???!!!\n",start_x,start_y,end_x,end_y);
 
-					if( bUseMeanOnFitFailed ){
-						printf("WARNING : setting large value sigma=1000.00 ADU\n");
+				if( bUseMeanOnFitFailed ){
+					printf("WARNING : setting large value sigma=1000.00 ADU\n");
 
-						mean = 0.00;
-						sigma = 1000.00;
+					mean = 0.00;
+					sigma = 1000.00;
 					
-						info.m_DataInfo[ laplaceType ].m_Average = mean;
-					   info.m_DataInfo[ laplaceType ].m_Sigma = sigma;
-				   	info.m_DataInfo[ laplaceType ].m_bFitOK = FALSE;
+					info.m_DataInfo[ laplaceType ].m_Average = mean;
+			  	   info.m_DataInfo[ laplaceType ].m_Sigma = sigma;
+			  	   info.m_DataInfo[ laplaceType ].m_bFitOK = FALSE;
 
-						return TRUE;
-					}
+					return TRUE;
 				}
-
-				return FALSE;
 			}
 
-	      pHisto = new CMyHisto( laplace_name, minVal, maxVal,  binNo );	
+			return FALSE;
 		}
-      info.m_HistoList.Add( pHisto );
-   }
+		
+		if( !pHisto ){
+		   pHisto = new CMyHisto( laplace_name, minVal, maxVal,  binNo );	
+		}else{
+			pHisto->Init( minVal, maxVal,  binNo );
+		}
+	}
+	if( bDoAdd ){
+	   info.m_HistoList.Add( pHisto );
+	}
+
 	pHisto->Clear();
 
 
@@ -1236,15 +1365,83 @@ BOOL_T Table2D<ARG_TYPE>::GetVariableMeanAndSigma( eLaplaceType_T laplaceType,
 	PROFILER_START
 	int nSteps=500;
 	BOOL_T bFitGaussResult = pHisto->FitGauss(  mean_fit, sigma_fit, norm_fit, 
-															  nSteps, TRUE, bUseMeanOnFitFailed );
+															  nSteps, TRUE, bUseMeanOnFitFailed, 
+															  FALSE );
+
+	// INFO : newer root fits much better, maybe it is not needed at all :
+	// try to re-fit :
+	if( !bFitGaussResult ){
+		if( pHisto ){
+			printf("WARNING : gauss fit failed in window (%d,%d)-(%d,%d), retrying in different binning\n",low_x, up_x, low_y, up_y);
+			printf("WARNING : retrying in different binning ...\n");fflush(stdout);
+			if( laplaceType == eRawS ){	
+				// typicaly fit failes, because there is only 1-3 points > 0 and very short spike, this 
+				// means that histogram range (initial RMS/sigma) is too high, so i try to make 
+				// histogram range smaller and re-try fit, that is why there is n_sigma=1 here :
+				double n_sigma=1.00; 
+
+				double min_histo_val = mean_tmp-n_sigma*sigma_tmp;
+				double max_histo_val = mean_tmp+n_sigma*sigma_tmp;
+				pHisto->Init( min_histo_val, max_histo_val, binNo );
+				printf("Histogram re-initialized with range %.2f - %.2f ( from %.2f +/- %.2f * %.2f ) , binning = %d\n",
+							min_histo_val,max_histo_val,mean_tmp,n_sigma,sigma_tmp,binNo);
+			}else{
+				double n_sigma=3.00;
+				double min_histo_val = mean_lap-n_sigma*sigma_lap;
+         	double max_histo_val = mean_lap+n_sigma*sigma_lap;
+				pHisto->Init( min_histo_val, max_histo_val, binNo );
+				printf("Histogram re-initialized with range %.2f - %.2f ( from %.2f +/- %.2f * %.2f ) , binning = %d\n",
+							min_histo_val,max_histo_val,mean_tmp,n_sigma,sigma_tmp,binNo);
+			}
+
+			double norm;
+			if( p_lap_data ){
+				FillHistoFromData( laplaceType, low_x, up_x, low_y, up_y, mean, sigma,
+									 norm, pHisto, p_lap_data );
+			}else{
+				// skiping saturated pixels :
+				pHisto->m_SkipBigger = MAX_VALUE_ALLOWED;
+
+				FillHisto( laplaceType, low_x, up_x, low_y, up_y, mean, 
+						  sigma, norm, pHisto );
+			}	
+		
+			if(!pHisto->IsCharCalculated()){
+				// not first time :
+				pHisto->SetCharValues( mean, sigma, norm );
+			}
+	
+			int nSteps=500;
+			bFitGaussResult = pHisto->FitGauss(  mean_fit, sigma_fit, norm_fit, nSteps, TRUE, bUseMeanOnFitFailed );
+			if ( bFitGaussResult ){
+				printf("SUCCESS : re-fit of gauss ok !\n");
+
+				if( TRUE ){
+					char szPrefix[128];
+			      sprintf(szPrefix,"refitted_%.5d_%.5d",start_x,start_y);   
+					mystring szName;
+			      szName = pHisto->DumpToFile( frame_index, szPrefix );
+					printf("DEBUG : refitted histogram dumped to file %s\n",szName.c_str());
+				}
+			}else{
+				printf("WARNING : re-fit of gauss failed !\n");
+			}
+		}else{
+			printf("ERROR : cannot re-fit pHisto=NULL error in code ???\n");
+		}
+	} // end of re-fit 
+
+
+	mystring szName;
+	if((!bFitGaussResult && gDoDumpBadFit) || gDoDumpAllHisto){
+		char szPrefix[128];
+      sprintf(szPrefix,"err_%.5d_%.5d",start_x,start_y);
+      szName = pHisto->DumpToFile( frame_index, szPrefix );
+	}
 
 	if( !bFitGaussResult ){
 		printf("DEBUG : gauss fit result = %d ( printf_level = %d )\n",bFitGaussResult,gPrintfLevel);fflush(stdout);
 	
-		mystring szName;
-		if(gDoDumpBadFit || gDoDumpAllHisto){
-			szName = pHisto->DumpToFile( frame_index, "err" );
-		}
 		printf("---------------------------------\n");
 		printf("ERROR_GAUSS : could not fit GAUSS !!! mean=%f, sigma=%f, norm=%f\n",mean_fit, sigma_fit, norm_fit);
 		printf("ERROR_GAUSS_CODE : %d\n",pHisto->m_ErrorCode);
@@ -1262,6 +1459,9 @@ BOOL_T Table2D<ARG_TYPE>::GetVariableMeanAndSigma( eLaplaceType_T laplaceType,
 			printf("GAUSS FIT FAILED - ACCEPTING MEAN=%.2f and RMS=%.2f\n",mean_fit, sigma_fit);
 			bFitGaussResult = TRUE;
 		}
+		info.m_DataInfo[ laplaceType ].m_eFitResType = eFitResAVG;
+	}else{
+		info.m_DataInfo[ laplaceType ].m_eFitResType = eFitResGauss;
 	}
 
 
@@ -1702,6 +1902,8 @@ BOOL_T Table2D<ARG_TYPE>::GetImage( long x0, long y0,long len_x, long len_y,
 
 	Image.m_X_On_Big = x0_in;
 	Image.m_Y_On_Big = y0_in;	
+	Image.m_StartOnOrigX = x0_in;
+	Image.m_StartOnOrigY = y0_in;
 	long x1 = x0_in + len_x - 1;
 	long y1 = y0_in + len_y - 1;
 
@@ -1744,6 +1946,8 @@ BOOL_T Table2D<ARG_TYPE>::GetImageELEMTYPE( long x0, long y0,long len_x, long le
 
 	Image.m_X_On_Big = x0_in;
 	Image.m_Y_On_Big = y0_in;	
+	Image.m_StartOnOrigX = x0_in;
+   Image.m_StartOnOrigY = y0_in;
 	long x1 = x0_in + len_x - 1;
 	long y1 = y0_in + len_y - 1;
 
@@ -1788,6 +1992,8 @@ BOOL_T Table2D<ARG_TYPE>::GetImageBIGELEMTYPE( long x0, long y0,long len_x, long
 
 	Image.m_X_On_Big = x0_in;
 	Image.m_Y_On_Big = y0_in;	
+	Image.m_StartOnOrigX = x0_in;
+   Image.m_StartOnOrigY = y0_in;
 	long x1 = x0_in + len_x - 1;
 	long y1 = y0_in + len_y - 1;
 
@@ -2030,18 +2236,29 @@ double Table2D<ARG_TYPE>::CalcG54( LONG_T x, LONG_T y, LONG_T xSize, ARG_TYPE** 
 template<class ARG_TYPE>
 LONG_T Table2D<ARG_TYPE>::CalcLaplaceSum( LONG_T x, LONG_T y, LONG_T xSize,
                                  ARG_TYPE** p_data, eLaplaceType_T laplaceType,
-                                 LONG_T& plus_sum, LONG_T& minus_sum )
+                                 LONG_T& plus_sum, LONG_T& minus_sum,
+											BOOL_T bMedianBkg /*=FALSE*/ )
 {
 	plus_sum = 0;
 	for(register int i=0;i<gLaplaceInfo[laplaceType].m_PlusCount;i++){
 		plus_sum += (int)p_data[y+gLaplaceInfo[laplaceType].m_PlusList[i].y][x+gLaplaceInfo[laplaceType].m_PlusList[i].x];
 	}
+
+	LONG_T bkg_values[100];
 	minus_sum=0;
 	for(register int i=0;i<gLaplaceInfo[laplaceType].m_MinusCount;i++){
-		minus_sum += (int)p_data[y+gLaplaceInfo[laplaceType].m_MinusList[i].y][x+gLaplaceInfo[laplaceType].m_MinusList[i].x];
+		bkg_values[i] = (int)p_data[y+gLaplaceInfo[laplaceType].m_MinusList[i].y][x+gLaplaceInfo[laplaceType].m_MinusList[i].x];
+		minus_sum += bkg_values[i];
+	}
+	
+	double bkg_value = gLaplaceInfo[laplaceType].m_MinusFactor*minus_sum;
+	if( bMedianBkg ){
+		my_qsort( bkg_values, gLaplaceInfo[laplaceType].m_MinusCount );
+		bkg_value = bkg_values[(int)(gLaplaceInfo[laplaceType].m_MinusCount/2)];	
+		bkg_value = bkg_value*gLaplaceInfo[laplaceType].m_PlusCount;
 	}
 
-	return (int)(plus_sum - gLaplaceInfo[laplaceType].m_MinusFactor*minus_sum);
+	return (int)(plus_sum - bkg_value);
 }
 
 template<class ARG_TYPE>
@@ -2312,7 +2529,8 @@ LONG_T Table2D<ARG_TYPE>::CalcLaplaceSumBigOLD( LONG_T x, LONG_T y, LONG_T xSize
 template<class ARG_TYPE>
 LONG_T Table2D<ARG_TYPE>::CalcLaplaceSum( LONG_T x, LONG_T y,
 										 LONG_T xSize, ARG_TYPE** p_data,
-										 eLaplaceType_T laplaceType )
+										 eLaplaceType_T laplaceType,
+										 BOOL_T bMedianBkg /*=FALSE*/ )
 {
 /*	LONG_T laplace = 0;
 	LONG_T plus_sum = 0;
@@ -2325,12 +2543,22 @@ LONG_T Table2D<ARG_TYPE>::CalcLaplaceSum( LONG_T x, LONG_T y,
 	for(register int i=0;i<gLaplaceInfo[laplaceType].m_PlusCount;i++){
 		plus_sum += (int)p_data[y+gLaplaceInfo[laplaceType].m_PlusList[i].y][x+gLaplaceInfo[laplaceType].m_PlusList[i].x];
 	}
+
+	LONG_T bkg_values[100];
 	register int minus_sum=0;
 	for(register int i=0;i<gLaplaceInfo[laplaceType].m_MinusCount;i++){
-		minus_sum += (int)p_data[y+gLaplaceInfo[laplaceType].m_MinusList[i].y][x+gLaplaceInfo[laplaceType].m_MinusList[i].x];
+		bkg_values[i] = (int)p_data[y+gLaplaceInfo[laplaceType].m_MinusList[i].y][x+gLaplaceInfo[laplaceType].m_MinusList[i].x];
+		minus_sum += bkg_values[i];
 	}
 
-	return (int)(plus_sum - gLaplaceInfo[laplaceType].m_MinusFactor*minus_sum);
+	double bkg_value = gLaplaceInfo[laplaceType].m_MinusFactor*minus_sum;
+	if( bMedianBkg ){
+		my_qsort( bkg_values, gLaplaceInfo[laplaceType].m_MinusCount );
+		bkg_value = bkg_values[(int)(gLaplaceInfo[laplaceType].m_MinusCount/2)];	
+		bkg_value = bkg_value*gLaplaceInfo[laplaceType].m_PlusCount;
+	}
+
+	return (int)(plus_sum - bkg_value);
 }
 
 template<class ARG_TYPE>
@@ -3055,6 +3283,28 @@ void Table2D<ARG_TYPE>::GenEmptyImage( double sigma, double mean )
 		bar.Update();
 	}
 	printf("Image generated OK\n");fflush(stdout);
+}
+
+template<class ARG_TYPE>
+void Table2D<ARG_TYPE>::CutBorderBase( int left, int up, int right, int bottom, Table2D<ARG_TYPE>& out_image )
+{
+	int size_x = m_SizeX - (left+right);
+   int size_y = m_SizeY - (bottom+up); 
+
+   out_image.InitConstructor( size_x, size_y );
+   ARG_TYPE** out_data = out_image.get_data_buffer_fast();
+
+   for(int y=bottom;y<(m_SizeY-up);y++){
+      for(int x=left;x<(m_SizeX-right);x++){
+         out_data[y-bottom][x-left] = m_pFastData[y][x];
+      }
+   }   
+       
+       
+   char savearea[50];
+   sprintf(savearea,"%d %d %d %d",left,bottom,(m_SizeX-right),(m_SizeY-up));
+//   out_image.GetKeyTab().Set( SAVEAREA , savearea );
+//   out_image.GetKeyTab().Set( ASTTHIS , 0 );
 }
 
 #endif

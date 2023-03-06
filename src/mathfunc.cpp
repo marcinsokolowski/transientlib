@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include "mathfunc.h"
 // #include "mathdefs.h"
 #include <stdio.h>
@@ -312,6 +279,11 @@ int CMyMathFunc::shift_vec( double x, double y, double z,
 
 /***********************************************************
 * get offset from the offset_grid
+
+OPIS :
+Na podstawie 4 najblizszych komorek wyliczana jest wartosc w 
+zadanej pozycji wazona odleglosciami do srodkow tych 4 
+najblizszych komorek
 ***********************************************************/
 double CMyMathFunc::offset(double* offset,int nx,int ny,
 			  double xc,double yc,double xmin,double xmax,
@@ -377,20 +349,31 @@ double CMyMathFunc::offset(float* offset,int nx,int ny,
 *   into the (float)matrix off[nc,nc]
 *   minimum nuber of medianed points: nmin
 *   maximum radius for collecting points: rmax grid_points
+
+OPIS :
+Ta funkcja dzieli chip na nc x nc ( default : 32 x 32 ) , komorek , 
+potem w kazdej znajduje gwiazy podane w INPUT, nastepnie szuka w 
+sasiednich komorkach, az do promienia rmax gwiazd, chyba ze osiagnie 
+nmin ( minimalna wymagana liczbe gwiazd ) , wtedy przestaje poszukiwac, 
+przestaje takze jesli przekroczy promien poszukiwan rmax. 
 **************************************************************************/
 int CMyMathFunc::smooth(double* xl,double* yl,double* ml,
 	   int n,
 	   double xmin,double xmax,double ymin,double ymax,
 	   float** off,int nc,int nmin,int rmax,
-	   double* sm,double* ss)
+	   double* sm,double* ss, int bShowMap )
 {
   int i,j,k,ii,jj,m,ix,iy,in,iss;
   int *ic=NULL,**id=NULL,mk,r,*ind;
   double *md, smm, sss, d;
 
+  // image is divided in 32x32 squares (each ~ 2030/32 ~ 67 pixeli ) 
+  // preparation of cells, id is table 2D to quickly find given star
+  // it is 2D index in fact , ic table is counter for each cell 
+  // counting number of stars in cell
   *off = (float *)malloc(nc*nc*sizeof(float));
-  id = (int **) calloc(nc*nc,sizeof(int *)); // calloc filles with 0 
-  ic = (int *) calloc(nc*nc,sizeof(int));    // calloc filles with 0
+  id = (int **) calloc(nc*nc,sizeof(int *)); // calloc fills with 0 
+  ic = (int *) calloc(nc*nc,sizeof(int));    // calloc fills with 0
   for(i=0; i<n; i++){
     if(ml[i] > 30)continue;
     ix = (xl[i]-xmin)/(xmax-xmin)*nc;
@@ -406,6 +389,10 @@ int CMyMathFunc::smooth(double* xl,double* yl,double* ml,
   }
   iss = 0;
   smm = sss = 0.;
+
+  // Dla kazdej komorki wybieramy teraz co najmniej nmin gwiazd w jej 
+  // otoczeniu ( max rmax) , i zapisujemy sobie je w tablicy 
+  // ich poprawki beda uzyte do najlepszej sredniej poprawki w danej komorce 
   for(j=0; j<nc; j++){
     for(i=0; i<nc; i++){
       mk = 0;
@@ -418,7 +405,12 @@ int CMyMathFunc::smooth(double* xl,double* yl,double* ml,
             if(ii < 0 || ii >= nc)continue;
 //            d = sqrt ( (double)((ii-i)*(ii-i)+(jj-j)*(jj-j)));
 //            if( r> 0 && d > r)continue;
+
+				// check only borders, skip inside ( checked earlier )
             if(jj>j-r && jj <j+r && ii>i-r && ii<i+r) continue;
+
+				// add all stars in given radius to list of stars for normalization
+				// of current cell (one of 32x32 cells to which CCD was divided )
             in = ii + jj*nc;
             for(k=0; k<ic[in]; k++){
               if(mk%100 == 0)md = (double*)realloc(md, (mk+100)*sizeof(double));
@@ -443,6 +435,18 @@ int CMyMathFunc::smooth(double* xl,double* yl,double* ml,
       if(md)free(md);
     }
   }  
+
+  if( bShowMap ){
+  	 printf("------------------------------ STARS IN CELLS ------------------------------\n");
+    for(j=(nc-1); j>=0; j--){
+  	 	for(i=0; i<nc; i++){
+  	 		printf("%.4d ",ic[i+j*nc]);
+		}
+		printf("\n");
+	 }
+	 printf("----------------------------------------------------------------------------\n");
+  }
+
   if(iss) sss /= iss, smm /= iss;
   *ss = sss;
   *sm = smm;
@@ -605,6 +609,92 @@ double CMyMathFunc::GlobalGauss( double x, double y )
 
 double CMyMathFunc::GaussIntegral( double x0, double y0, double x1, double y1 )
 {
-//	return CMyFit::GaussIntegral( x0, y0, x1, y1 );
-	return 0.00;
+	return CMyFit::GaussIntegral( x0, y0, x1, y1 );
+}
+
+double CMyMathFunc::ParLenFunc( double p )
+{
+	double ret = p*sqrt(1.0+p*p)+asinh(p);
+	return ret;
+}
+
+
+double CMyMathFunc::ParLen( double a, double b, double c,
+                             double x0, double x1 )
+{
+	double s=0.00;
+	if( a != 0 ){
+		s = (1.00/(4.00*a))*(ParLenFunc(2*a*x1+b)-ParLenFunc(2*a*x0+b));
+	}
+	
+	return s;
+}                             
+            
+// RETURNS :              
+// -1 : when cannot find position where parabola lenght equals len
+//        because it is outside CCD 
+int CMyMathFunc::FindParStartEnd( double a, double b, double c,
+                                  double x_last, double s_in,
+                                  double vx, 
+                                  double& x0_out, double& x1_out, double& s_out,
+                                  double err )
+{
+  int max_loop=1000;
+
+  if( vx > 0 ){
+    // moving right : x0 - constant , changing x1 :
+    double x1_start = x_last; // lower limit for x1
+    double x1_end = x_last + 2*s_in; 	     // upper limit for  x1
+    
+    // finding "zero place" with bisection method 
+    int i=0;
+    double x1_test = (x1_start+x1_end)/2.00;    
+    double len = ParLen( a, b, c, x_last, x1_test );
+    while ( abs(len-s_in) > err && i<max_loop ){ // was abs(x1_start-x1_end) > err
+      x1_test = (x1_start+x1_end)/2.00;
+      len = ParLen( a, b, c, x_last, x1_test ); // calculate lenght of parabola 
+      
+      if( len < s_in ){
+        // too short -> x1 > x1_test :
+        x1_start = x1_test;
+      }else{
+        // too long -> x1 < x1_test :
+        x1_end = x1_test;
+      }
+      i++;
+    }    
+    
+    x0_out = x_last;
+    x1_out = x1_test;
+    s_out = ParLen( a, b, c, x0_out, x1_out );
+  }else{
+    // moving left : x1 - constant , changing x0 :
+    double x0_start = x_last - 2*s_in; // lower limit for x0
+    double x0_end = x_last;         // upper limit for x0
+    
+    // finding "zero place" with bisection method 
+    int i=0;
+    double x0_test = (x0_start+x0_end)/2.00;
+    double len = ParLen( a, b, c, x0_test, x_last );
+    while ( abs(len-s_in) > err && i<max_loop ){ // was abs(x0_start-x0_end) > err
+      x0_test = (x0_start+x0_end)/2.00;
+      len = ParLen( a, b, c, x0_test, x_last );      
+      
+      if( len < s_in ){
+        // too short -> x1 > x1_test :
+        x0_end = x0_test;
+      }else{
+        // too long -> x1 < x1_test :
+        x0_start = x0_test;
+      }
+      i++;
+    }    
+
+    x0_out = x0_test;    
+    x1_out = x_last;
+    s_out = ParLen( a, b, c, x0_out, x1_out );
+  }
+
+
+  return (x0_out>0 && x0_out<2048 && x1_out>0 && x1_out<2048);
 }

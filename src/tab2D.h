@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #ifndef _TAB2D_H__
 #define _TAB2D_H__
 
@@ -106,8 +73,10 @@ public:
    double m_MeanValue;
 
 	// for geting image from bigger one :
-	long m_X_On_Big;
-	long m_Y_On_Big;
+	long m_X_On_Big; // it is used for astrometric calculations, it may be disabled in case image
+	long m_Y_On_Big; // has its own astrometry ( aver20 ) pipeline ( ASTTHIS=1 ) , in such a case it is ignored
+	int  m_StartOnOrigX; // filled always to know where image started on original image 
+	int  m_StartOnOrigY; // it maybe used for bad rows/cols 
 
 	// transalation/rotation corrections :
 	LONG_T m_PrevShiftX;
@@ -143,6 +112,13 @@ public:
 
    BOOL_T Alloc(long x_size,long y_size);
 
+   // making smaller image from larger :
+   void CutBorderBase( int left, int up, int right, int bottom, Table2D<ARG_TYPE>& out_image );
+   
+   // do not change buffer ( it is still large ), only change sizes :
+   // WARNING : enlarging will not work - it must be implemented !!!
+   BOOL_T ReSize(long x_size,long y_size);
+
    void ReCalcIndex();
    void ReCreateIndex();
    
@@ -170,7 +146,7 @@ public:
 	virtual BIG_ELEM_TYPE* get_frame_laplace(){ return NULL; }
 	virtual BIG_ELEM_TYPE** get_frame_laplace_fast(){ return NULL; }
 
-	int GetPixelsAbove( double treshold, CPointList& pointList );
+	int GetPixelsAbove( double treshold, CPointList& pointList, int start_x=0, int end_x=0, int start_y=100000, int end_y=100000 );
 
 	// simple statistics functions :
 	void GetSafeStatistics( LONG_T start_x, LONG_T start_y,
@@ -383,13 +359,14 @@ public:
 
 
 	static inline LONG_T CalcLaplaceSum( LONG_T x, LONG_T y, LONG_T xSize, ARG_TYPE** p_data,
-										eLaplaceType_T laplaceType );
+										eLaplaceType_T laplaceType, BOOL_T bMedianBkg=FALSE );
 
 	static inline LONG_T CalcLaplaceSumBig( LONG_T x, LONG_T y, LONG_T xSize, BIG_ELEM_TYPE** p_data,
 										eLaplaceType_T laplaceType );
 
 	static inline LONG_T CalcLaplaceSum( LONG_T x, LONG_T y, LONG_T xSize, ARG_TYPE** p_data,
-										eLaplaceType_T laplaceType, LONG_T& plus_sum, LONG_T& minus_sum );
+										eLaplaceType_T laplaceType, LONG_T& plus_sum, LONG_T& minus_sum,
+										BOOL_T bMedianBkg=FALSE );
 
 	static inline LONG_T CalcLaplaceSumBig( LONG_T x, LONG_T y, LONG_T xSize, BIG_ELEM_TYPE** p_data,
 										eLaplaceType_T laplaceType, LONG_T& plus_sum, LONG_T& minus_sum );

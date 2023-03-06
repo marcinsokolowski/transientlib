@@ -837,7 +837,7 @@ BOOL_T CCDStarSpy::CalcRotation( double& angle_per_frame,  double& x_cross, doub
 						angle_per_sec = angle/totalTime;
 					}
 				
-   		   	printf(" Rotation angle = %f ( %f deg ) = /%d => %.20f ( / frame ) \n",angle,angle*(180/PI),frames_no,angle_per_frame);	
+   		   	printf(" Rotation angle = %f ( %f deg ) = /%d => %.20f ( / frame ) \n",angle,angle*(180/PI_VALUE),frames_no,angle_per_frame);	
 
 					m_bRotation = TRUE;
 					m_RotCenterX = x_cross;

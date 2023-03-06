@@ -84,10 +84,11 @@ time_t get_gmmidnight_ut( time_t ut_time );
 BASELIB_EI mystring get_clock_in_sec_string( long cl);
 
 mystring get_gmtime_string( time_t ut_time );
-
 mystring get_gmtime_string();
 
-time_t get_gmtime_from_string( const char* szGmTime );
+mystring get_localtime_string( time_t ut_time );
+
+time_t get_gmtime_from_string( const char* szGmTime , const char* format="%Y%m%d_%H%M%S" );
 time_t get_unixtime_from_local_string( const char* szDTM );
 time_t get_unixtime_from_local_string2( const char* szDTM );
 

@@ -6872,7 +6872,7 @@ BOOL_T CCD_Analyser::ConfirmEvent_MaxPrevSums( LONG_T MatrixIdx, CCDPipeline& cc
 		}
 	}
 	if(MaxSum>0){
-		LONGLONG_T nConfTreshold = (LONGLONG_T)(PI*nConfRedial*nConfRedial)*gCCDParams.m_ConfTresholdPerPixel;
+		LONGLONG_T nConfTreshold = (LONGLONG_T)(PI_VALUE*nConfRedial*nConfRedial)*gCCDParams.m_ConfTresholdPerPixel;
 		newSum = ccd_matrix.CalcSumAround( x, y , (LONG_T)nConfRedial );
 		if(newSum - MaxSum > nConfTreshold){
 			MYTRACE4(gCCDTrace,"Event at (" << x << "," << y << ") accepted MaxSum=" << MaxSum << ", newSum=" << newSum );

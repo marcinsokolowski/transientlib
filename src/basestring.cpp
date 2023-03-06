@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #include <stdio.h>
 #include <string.h>
 #include "basestring.h"
@@ -92,7 +59,7 @@ BaseString::BaseString(const char z)
 BaseString::BaseString(long number)
 :m_Size(-1), m_Length(0), m_pchData(NULL)
 {
-	static char buffer[BUFF_SIZE];
+	char buffer[BUFF_SIZE];
 	if (sprintf(buffer,"%d",number)>=BUFF_SIZE)
 		AssertNULL(NULL);
 	(*this) << buffer;
@@ -142,11 +109,14 @@ const char& BaseString::operator[](int pos) const
 	
 BaseString& BaseString::operator +=(const char* pszString)
 {
-	int len=my_strlen(pszString);
-	AllocBuffer(m_Length+len);
-	if(pszString)
-		strcat(m_pchData,pszString);
-	m_Length += len;
+	// NEW - just to be safe, NULL is ignored 
+	if( pszString ){
+		int len=my_strlen(pszString);
+		AllocBuffer(m_Length+len);
+		if(pszString)
+			strcat(m_pchData,pszString);
+		m_Length += len;
+	}
 	return (*this);
 }
 
@@ -245,14 +215,29 @@ void BaseString::replace(int pos,int len,const char* nnew)
 		m_pchData[pos] = '\0';
 		BaseString szBegin = m_pchData;
 		BaseString szEnd = m_pchData+pos+len;
-		m_Length = strlen(m_pchData)+szEnd.length()+strlen(nnew);
-		char* ptr = m_pchData;
-		m_pchData = new char[m_Length+1];
-		strcpy(m_pchData,ptr);
+		
+		// calculating length of new string :
+		int begin_len = szBegin.length();
+		int end_len = szEnd.length();
+		int nnew_len = strlen(nnew);		            		
+		m_Length = begin_len + nnew_len + end_len; // lenght of new string
+
+		// always use AllocBuffer not new char[] , because it also updates m_Size !!! 
+		// which is later used to check if ReAlloc is needed, the problem with option -cat was 
+		// that gCCDParams.m_szASASStarCatalog variable was not assign any value in constructor, so m_Size=101 buffer was allocated
+		// but later there was :
+		// 1) env2str which changed m_Lenght to 41 and allocated 41 bytes to m_pchData buffer, but left m_Size=101 which was absured, because m_pchData had only 41 bytes !!!
+		// 2) assigned of 51 characters string, which called AllocBuffer but exited because m_Size=101 > 51 so no allocation was needed ! , which caused core dump at exit
+		//    becase memory was written in not allocated region ( 51 > 41 ) !!! 
+		// 
+		// CONCLUSION : always call AllocBuffer which makes it in a wise way , do not do it manually with m_pchData allocation and m_Lenght assignment !!!
+		AllocBuffer( m_Length ); // allocates space for m_Length string ( + end character )
+
+		strcpy(m_pchData,szBegin.c_str());
 		strcat(m_pchData,nnew);
+		m_pchData[begin_len+nnew_len]='\0';
 		strcat(m_pchData,szEnd.c_str());
 		m_pchData[m_Length]='\0';
-		delete [] ptr;
 	}
 }
 	

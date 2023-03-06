@@ -1,36 +1,3 @@
-/***************************************************************************\
- **  transientlib : library for identification of short optical flashes 
- **						with the wide field cameras.
- **  This software was written by Marcin Sokolowski ( msok@fuw.edu.pl ) 
- **	it was a substantial part of analysis performed for PHD thesis 
- **  ( Investigation of astrophysical phenomena in short time scales with "Pi of the Sky" apparatus )
- **	it can be used under the terms of GNU General Public License.
- **	In case this software is used for scientific purposes and results are
- **	published, please refer to the PHD thesis submited to astro-ph :
- **
- **		http://arxiv.org/abs/0810.1179
- **
- ** Public distribution was started on 2008-10-31
- **
- ** 
- ** NOTE : some of the files (C files) were created by other developers and 
- **        they maybe distributed under different conditions.
- ** 
-
- ******************************************************************************
- ** This program is free software; you can redistribute it and/or modify it
- ** under the terms of the GNU General Public License as published by the
- ** Free Software Foundation; either version 2 of the License or any later
- ** version. 
- **
- ** This program is distributed in the hope that it will be useful,
- ** but WITHOUT ANY WARRANTY; without even the implied warranty of
- ** MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- ** General Public License for more details. 
- **
- *\**************************************************************************
-
-*/           
 #ifndef _UNIX
 #include <direct.h>
 #else
@@ -74,6 +41,25 @@ BASELIB_EI const char* getbasename_new(const mystring& name,mystring& out)
 	while(name[i]!='.' && name[i]!='\0'){
 		out += name[i];
 		i++;
+	}
+	out += '\0';
+	return out.c_str();
+}
+
+BASELIB_EI const char* getbasename_robust(const mystring& name,mystring& out)
+{
+	int last_non_ext=strlen(name.c_str())-1;
+	out.clear();
+	while( last_non_ext > 0 ){
+      if( name[last_non_ext] == '.' ){
+         break;
+      } 
+      
+      last_non_ext--;
+	}
+
+	for(int i=0;i<last_non_ext;i++){
+	   out += name[i];
 	}
 	out += '\0';
 	return out.c_str();
@@ -159,7 +145,7 @@ BOOL_T MyFile::Open(const char* filename,const char* attr,BOOL_T bExcp)
 		m_pFile = fopen(m_FileName.c_str(),attr);
 		if (!m_pFile && bExcp){
 			mystring szMsg;
-			szMsg << "Could not open file (encosed in :) :" << m_FileName.c_str() << ":";
+			szMsg << "Could not open file (encosed in :) :" << m_FileName.c_str() << ": in mode :" << attr << ":";
 			PrintToTraceFile( szMsg.c_str() );
 			throw CExcFile(errno,szMsg.c_str());
 		}
@@ -208,8 +194,17 @@ char* MyFile::GetLine(BOOL_T bNoNewLine/*=FALSE*/)
 		m_pBuffer = pNewBuffer;
 	}
 
-	if (bNoNewLine && m_pBuffer[strlen(m_pBuffer)-1]=='\n')
-		m_pBuffer[strlen(m_pBuffer)-1]='\0';
+//	if( strlen(m_pBuffer)<=0 ){
+//	  printf("CRITICAL ERROR !!!! - MEMORY ACCESS BUG !!!\n");
+//	}
+
+	if( m_pBuffer ){
+    	int buff_len=strlen(m_pBuffer);
+    	if( buff_len>0 ){ // otherwise already it is : m_pBuffer[0]='\0' 
+    	  if ( bNoNewLine && m_pBuffer[buff_len-1]=='\n')
+          m_pBuffer[buff_len-1]='\0';
+      }
+   }
 	return (ret ? m_pBuffer : ret);
 }
 
@@ -583,9 +578,24 @@ const char* MyFile::GetCWD( mystring& szDir )
 
 int MyFile::GetFileSize( const char* filename )
 {
+	if( !DoesFileExist( filename ) ){
+		return -1;
+	}
+
 	struct stat buf;
 	stat( filename, &buf );
 	return (int)buf.st_size;
+}
+
+time_t MyFile::GetLastModif( const char* filename )
+{
+   if( !DoesFileExist( filename ) ){
+      return 0;
+   }
+   
+   struct stat buf;
+   stat( filename, &buf );
+   return (int)buf.st_mtime;                  
 }
 
 int MyFile::WriteFile( const char* filename, char* ptr, int size )
@@ -675,3 +685,17 @@ void MyFile::save_day_file_counter( const char* filename, int counter )
    MyOFile out( szFile.c_str() );
    out.Printf("%s %d\n",szDT.c_str(),counter);
 }
+
+const char* MyFile::change_ext(const char* name,const char* new_ext,mystring& out)
+{
+   mystring tmp_file;
+   getbasename_new(name,tmp_file);
+      
+   out=tmp_file.c_str();
+   out += ".";
+   out += new_ext;   
+               
+   return out.c_str();
+}
+                  
+                  
