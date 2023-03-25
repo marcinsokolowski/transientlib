@@ -62,4 +62,4 @@ target_link_libraries(date2date transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROO
 
 
 # INSTALLATION:
-install(TARGETS sattest RUNTIME DESTINATION bin)
+install(TARGETS sattest date2date RUNTIME DESTINATION bin)
