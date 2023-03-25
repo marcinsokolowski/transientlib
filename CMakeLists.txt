@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.5.1)
 project(transientlib VERSION 1.0.1)
 include(GNUInstallDirs)
 
@@ -56,6 +56,10 @@ target_link_libraries(transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIE
 
 add_executable(sattest  apps/sattest/main.cpp)
 target_link_libraries(sattest transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIES} ${FFTW3_LIB} -ldl -lpthread -lcurses)
+
+add_executable(date2date  apps/date2date.cpp)
+target_link_libraries(date2date transientlib ${CFITSIO_LIB} ${LIBNOVA_LIB} ${ROOT_LIBRARIES} ${FFTW3_LIB} -ldl -lpthread -lcurses)
+
 
 # INSTALLATION:
 install(TARGETS sattest RUNTIME DESTINATION bin)
