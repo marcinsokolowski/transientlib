@@ -3,7 +3,7 @@
    Based on library for finding optical transients in "Pi of the Sky" data
 
 
-Acknowledgements
+# Acknowledgements
 
    If you have been using this software or the related web interface for your research. Please, cite the paper:
    
