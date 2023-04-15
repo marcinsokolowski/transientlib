@@ -31,7 +31,12 @@
 
   sattest -h
   
-  
+# Example of generating satellite positions at the Murchison Radio-astronomy Observatory (MRO) for a specified start time (UNIXTIME) and duration 
+
+  The defaults are to use NOW as start time and 10min (600 seconds)
+  In order to see a complete manual check documentation file doc/Manual_for_creating_satellite_position_predictions.pdf
+
+# Issues and bugs please report to Marcin Sokolowski ( marcin.sokolowski at curtin.edu.au ).  
 
 # Acknowledgements
 
