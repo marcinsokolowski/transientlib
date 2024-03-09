@@ -20,9 +20,41 @@ sys.path.append( new_import_path )
 print("Added import path %s" % new_import_path)
 import eda2_aavs2_concidence 
 import numpy as np
+import re
 
 # options :
 from optparse import OptionParser,OptionGroup
+
+def read_text_file( filename , verbose=0, ncols=2 ) :
+   az_list = []
+   elev_list = []
+
+   if os.path.exists(filename) and os.stat(filename).st_size > 0 :
+      file=open(filename,'r')
+      data=file.readlines()
+      for line in data :
+         if line[0] != "#" :
+#            words = line.split(' ')
+            words = re.split( '\s+' , line )
+
+            if verbose > 0 : 
+               print("DEBUG : line = %s -> |%s|%s|" % (line,words[0+0],words[1+0]))
+
+            if ncols >= 2 :
+               az = float(words[0+0])
+               elev = float(words[1+0])
+
+            az_list.append(az)
+            elev_list.append(elev)
+
+      file.close()
+   else :
+      print("WARNING : empty or non-existing file %s" % (filename))
+
+   print("READ %d values from file %s" % (len(az_list),filename))
+   
+
+   return (az_list,elev_list)
 
 
 def read_list_file( listfile ) :
@@ -82,11 +114,12 @@ def parse_options(idx=0):
    usage+='\tPlotting candidates\n'
    parser = OptionParser(usage=usage,version=1.00)
 
-   parser.add_option('--in_format','--input_format','--informat','--inputformat',dest="input_format",default="events", help="Input format [default %default]. events or sattest")
+   parser.add_option('--in_format','--input_format','--informat','--inputformat',dest="input_format",default="events", help="Input format [default %default]. events or sattest or azel (2 columns)")
    parser.add_option('--all',action="store_true",dest="all",default=False, help="Create all images (even without candidates) [default %s]")
    parser.add_option('--dpi',dest="dpi",default=100, help="Image DPI [default %default]",type="int") # 25
    parser.add_option('--out_format','--out_type','--ext','--out_image_type',dest="image_format",default="jpg", help="Output image type [default %default]")
    parser.add_option('--outdir','--out_dir','--output_dir','--dir',dest="outdir",default="images/",help="Output directory [default %default]")
+   parser.add_option('--imagefile','--image_file','--out_file','--out_image',dest="image_file",default="satellites.png",help="Output image file name [default %default]")
    # parser.add_option('--list_high_freq',dest="list_high_freq",default="cand_list_aavs2",help="High frequency candidates list [default %default]")
    # parser.add_option('--list_low_freq',dest="list_low_freq",default="cand_list_eda2",help="Low frequency candidates list [default %default]")
 
@@ -120,11 +153,14 @@ if __name__ == '__main__':
       gc.collect() # explicit invokation of garbage collector to clean-up memory (otherwise uses memory like crazy!)
                    # see : https://stackoverflow.com/questions/1316767/how-can-i-explicitly-free-memory-in-python
       candfile=fitsfile.replace(".fits","_cand.txt")
-      candidates=None
+      candidates=[]
+      imagefile=options.image_file
       if options.input_format == "sattest" :
          imagefile=fitsfile.replace(".txt","_cand.jpg")         
          print("%s -> %s" % (fitsfile,candfile))
          candidates=eda2_aavs2_concidence.read_sattest_file( candfile, 0.00, 0.00 )
+      elif options.input_format == "azel" :
+         (az_list,elev_list) = read_text_file( candfile )
       else : 
          imagefile=fitsfile.replace(".fits","_cand.jpg")
          print("%s -> %s" % (fitsfile,candfile))
@@ -132,12 +168,15 @@ if __name__ == '__main__':
       
       Az=[]
       El=[]
-      if (candidates is not None and len(candidates) > 0) or options.all :
+      if (candidates is not None and len(candidates) > 0) or options.all or (len(az_list)>0 and len(elev_list)>0) :
          for cand in candidates :
             Az.append(cand.azim_deg)
             El.append(cand.elev_deg)
-      
-                  
+            
+         for i in range(0,len(az_list)):
+            Az.append(az_list[i])
+            El.append(elev_list[i])
+                        
          Az= np.array(Az)
          El= np.array(El)
 
